@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # 데이터베이스: 사용자 정보 및 결제 내역 저장
+  db:
+    image: postgres:15
+    container_name: yourfactory-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: yourfactory
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./BACKEND/src/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+      - db_data:/var/lib/postgresql/data
+
+  # 비동기 작업용: 영상 처리가 오래 걸리므로 도입 권장
+  redis:
+    image: redis:alpine
+    container_name: yourfactory-redis
+
+  # AI 서버: Gemini API 활용 및 영상 합성 (FFMPEG)
+  ai:
+    build: ./AI
+    container_name: yourfactory-ai
+    volumes:
+      - ./shared_media:/app/media # 영상 파일 공유 볼륨
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  # AI 워커: analyze/render 비동기 job 처리
+  ai-worker:
+    build: ./AI
+    container_name: yourfactory-ai-worker
+    command: celery -A tasks.celery_app worker --loglevel=info
+    volumes:
+      - ./shared_media:/app/media
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  # 백엔드: API 통신, 결제 승인 로직, 스케줄러 관리
+  backend:
+    build: ./BACKEND
+    container_name: yourfactory-backend
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./shared_media:/app/media # AI 서버와 동일한 경로 공유
+    environment:
+      - DATABASE_URL=postgres://user:password@db:5432/yourfactory
+      - PORT=4000
+      - JWT_SECRET=your_jwt_secret_key_change_this_in_production
+      - JWT_EXPIRES_IN=24h
+      - BCRYPT_ROUNDS=10
+      - REDIS_URL=redis://redis:6379/0
+      - AI_BASE_URL=http://yourfactory-ai:8000
+    depends_on:
+      - db
+      - ai
+
+  # 프론트엔드: 유저 UI 및 관리자 페이지
+  frontend:
+    build: ./FRONTEND
+    container_name: yourfactory-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./FRONTEND:/app          # [수정] . 대신 ./FRONTEND로 변경
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:4000/api
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
