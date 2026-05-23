@@ -17,6 +17,8 @@ import {
   getDownloadUrl,
 } from '../api/works';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL.replace("/api","")
+
 const statusLabelMap = {
   'NEW': { label: '신규', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   'IN_PROGRESS': { label: '편집 중', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
@@ -28,8 +30,8 @@ const statusLabelMap = {
 const toMediaUrl = (value) => {
   if (!value) return '';
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
-  if (value.startsWith('/media/')) return `http://localhost:4000${value}`;
-  if (value.startsWith('/app/')) return `http://localhost:4000${value.replace('/app', '')}`;
+  if (value.startsWith('/media/')) return `${API_BASE_URL}${value}`;
+  if (value.startsWith('/app/')) return `${API_BASE_URL}${value.replace('/app', '')}`;
   return value;
 };
 
@@ -317,9 +319,8 @@ export default function Editor() {
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
 
-      // 1. 서버 파일명에서 확장자만 추출 (예: 'mp4', 'png' 등)
       const serverFileName = (downloadHref.split('/').pop() || 'output.mp4').split('?')[0];
-      const fileExtension = serverFileName.split('.').pop(); // 확장자 추출
+      const fileExtension = serverFileName.split('.').pop();
 
       anchor.download = `${projectName}.${fileExtension}`;
 
@@ -328,10 +329,9 @@ export default function Editor() {
       anchor.remove();
       window.URL.revokeObjectURL(objectUrl);
     } catch (error) {
-      // 에러 시 fallback (주의: 이 경우에는 클라이언트에서 이름을 지정할 수 없고 서버 이름을 따릅니다)
       window.open(downloadHref, '_blank', 'noopener,noreferrer');
     }
-};
+  };
 
   const isReadOnly = work?.status === 'RENDERING' || work?.status === 'DONE';
   const isCompleted = work?.status === 'DONE';
@@ -347,7 +347,8 @@ export default function Editor() {
 
   return (
     <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      <header className="h-16 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-50">
+      {/* 헤더 부분에 relative를 추가하여 내부에 프로그레스 바가 absolute로 위치할 수 있도록 수정했습니다. */}
+      <header className="h-16 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-50 relative">
         <div className="flex items-center gap-4">
           <Link to="/dashboard" className="p-2 hover:bg-white/10 rounded-xl transition-colors"><ArrowLeft className="w-5 h-5 text-slate-400" /></Link>
           <div className="flex items-center gap-3">
@@ -355,6 +356,15 @@ export default function Editor() {
             {work && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${(statusLabelMap[work?.status]?.color) || 'bg-white/10 text-slate-300 border-white/5'}`}>{(statusLabelMap[work?.status]?.label) || work?.status || 'Unknown'}</span>}
           </div>
         </div>
+        
+        {/* 분석/렌더링 중일 때 현재 상태 텍스트를 헤더 중앙에 작게 표시하여 사용자 인지성을 높였습니다. */}
+        {!isCompleted && jobProgress && !['DONE', 'COMPLETED', 'FAILED'].includes(jobProgress.status) && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-xs font-semibold tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>{jobProgress.message} ({jobProgress.progress ?? 0}%)</span>
+          </div>
+        )}
+
         <div className="flex items-center gap-3">
           {isCompleted ? (
             <>
@@ -376,20 +386,21 @@ export default function Editor() {
             </>
           )}
         </div>
+
+        {/* [변경 포인트] 기존의 독립적인 block 형태 대신 header 내부 최하단에 밀착하는 2px 프로그레스 바로 스타일을 수정했습니다. */}
+        {!isCompleted && jobProgress && (
+          <div className="absolute bottom-0 left-0 w-full h-[2px] bg-white/5 overflow-hidden">
+            <div 
+              className={`h-full transition-all duration-300 ${
+                jobProgress.status === 'FAILED' ? 'bg-red-500' : ['DONE','COMPLETED'].includes(jobProgress.status) ? 'bg-emerald-500' : 'bg-cyan-500'
+              }`} 
+              style={{ width: `${Math.min(100, Math.max(0, jobProgress.progress ?? 0))}%` }} 
+            />
+          </div>
+        )}
       </header>
 
-      {!isCompleted && jobProgress && (
-        <div className={`px-6 py-3 border-b border-white/10 ${jobProgress.status === 'FAILED' ? 'bg-red-500/10 text-red-200' : ['DONE','COMPLETED'].includes(jobProgress.status) ? 'bg-emerald-500/10 text-emerald-200' : 'bg-cyan-500/10 text-cyan-200'}`}>
-          <div className="flex items-center justify-between gap-4 text-sm font-medium">
-            <span>{jobProgress.phase === 'analyze' ? '분석' : '렌더링'} 상태</span>
-            <span>{jobProgress.progress ?? 0}%</span>
-          </div>
-          <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${jobProgress.status === 'FAILED' ? 'bg-red-400' : ['DONE','COMPLETED'].includes(jobProgress.status) ? 'bg-emerald-400' : 'bg-cyan-400'}`} style={{ width: `${Math.min(100, Math.max(0, jobProgress.progress ?? 0))}%` }} />
-          </div>
-          <div className="mt-2 text-xs opacity-90">{jobProgress.message}</div>
-        </div>
-      )}
+      {/* 기존에 있던 큰 프로그레스 바 UI 블록구문은 깔끔하게 제거되었습니다. */}
 
       <main className="flex-1 flex overflow-hidden">
         {!sourceVideoPath ? (

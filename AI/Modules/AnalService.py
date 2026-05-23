@@ -1,5 +1,6 @@
 from Models.api import AnalyzeAPIResponse
 import os
+import ffmpeg
 from google import genai
 from google.genai import types
 
@@ -46,6 +47,8 @@ import os
 def analyzeAPI(sourceVideoPath: str) -> AnalyzeAPIResponse:
     print(f"[AI AnalService] analyzeAPI called sourceVideoPath={sourceVideoPath}", flush=True)
 
+    encode_video_for_gemini(sourceVideoPath, sourceVideoPath)
+
     api_key = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
 
@@ -61,7 +64,8 @@ def analyzeAPI(sourceVideoPath: str) -> AnalyzeAPIResponse:
         myfile = client.files.get(name=myfile.name)
 
     if myfile.state.name == "FAILED":
-        raise ValueError(f"File processing failed on Gemini server. File name: {myfile.name}")
+        print(myfile)
+        raise ValueError(f"File processing failed on Gemini server. File name: {myfile.name} {myfile.error}")
 
     print(f"\n[AI AnalService] File is now ACTIVE. Proceeding to content generation.", flush=True)
 
@@ -82,5 +86,36 @@ def analyzeAPI(sourceVideoPath: str) -> AnalyzeAPIResponse:
     client.files.delete(name=myfile.name)
      
     return data.model_dump()
+
+def encode_video_for_gemini(input_path, output_path):
+    """
+    Gemini API 호환을 위해 비디오를 H.264 / AAC 포맷으로 재인코딩합니다.
+    """
+    try:
+        print(f"변환 시작: {input_path} -> {output_path}")
+        
+        # ffmpeg 명령어 조립 및 실행
+        (
+            ffmpeg
+            .input(input_path)
+            .output(
+                output_path, 
+                vcodec='libx264',   # 영상 코덱을 H.264로 강제
+                acodec='aac',       # 음성 코덱을 AAC로 강제
+                pix_fmt='yuv420p',  # 대부분의 기기와 웹에서 지원하는 픽셀 포맷
+                vprofile='high',    # 호환성 높은 프로필
+                level='4.2'
+            )
+            .overwrite_output()     # 이미 출력 파일이 있다면 덮어쓰기
+            .run(capture_stdout=True, capture_stderr=True) # 로그 캡처
+        )
+        print("변환 완료 성공!")
+        return True
+        
+    except ffmpeg.Error as e:
+        # 에러 발생 시 ffmpeg이 남긴 상세 로그 출력 (원인 분석용)
+        print("FFmpeg 에러 발생!")
+        print(e.stderr.decode('utf-8'))
+        return False
 
     

@@ -9,9 +9,9 @@ const PORT = process.env.PORT || 5000;
 
 console.log('[backend] booting', {
   port: PORT,
-  redisUrl: process.env.REDIS_URL || 'redis://redis:6379/0',
-  aiBaseUrl: process.env.AI_BASE_URL || 'http://yourfactory-ai:8000',
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  redisUrl: process.env.REDIS_URL,
+  aiBaseUrl: process.env.AI_BASE_URL,
+  corsOrigin: process.env.CORS_ORIGIN
 });
 
 // Middleware
@@ -21,7 +21,7 @@ app.use(
   })
 );
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN,
   credentials: true,
 }));
 app.use(express.json());
@@ -57,5 +57,4 @@ require('./cron/cleanupTask.js');
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📍 API Base: http://localhost:${PORT}`);
 });

@@ -14,6 +14,8 @@ def create_video_with_subtitles(subtitle_data, video_output, font_path='Fonts/Na
     layout = subtitle_data.globalSubtitleLayout
     scripts = subtitle_data.editedScript
 
+    print(subtitle_data)
+
     box_y = layout.y
     box_h = layout.height
     meta_w = meta.width
