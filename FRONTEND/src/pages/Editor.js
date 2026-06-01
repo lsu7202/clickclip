@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+// 상단 임포트문에 FlipHorizontal 추가
 import {
   ArrowLeft, Save, Play, Download, Settings2, Type, History,
   CheckCircle2, Loader2, Sparkles, UploadCloud, Search, Square, Eraser, RefreshCw, MessageSquare,
-  Volume2
+  Volume2, Sliders, Palette, FlipHorizontal,
+  Music // 👈 비지엠 아이콘 추가
 } from 'lucide-react';
 
 import useSessionUser from '../hooks/useSessionUser';
@@ -17,7 +19,7 @@ import {
   getDownloadUrl,
 } from '../api/works';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL.replace("/api","")
+const API_BASE_URL = process.env.REACT_APP_API_URL.replace("/api", "")
 
 const statusLabelMap = {
   'NEW': { label: '신규', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
@@ -34,6 +36,9 @@ const toMediaUrl = (value) => {
   if (value.startsWith('/app/')) return `${API_BASE_URL}${value.replace('/app', '')}`;
   return value;
 };
+
+// 👈 컬러 옵션 상수 정의
+const COLOR_OPTIONS = ["#ffffff", "#000000", "#EA1821", "#FDF06F", "#17C37B", "#0B64C0", "#9357A9"];
 
 export default function Editor() {
   const { id: workIdParam } = useParams();
@@ -54,6 +59,20 @@ export default function Editor() {
   const [originalScript, setOriginalScript] = useState('');
   const [scripts, setScripts] = useState([]);
   const [selectedVoice, setSelectedVoice] = useState('F7wT70V3u09d2rY9pNa6');
+
+  const [bgmPreset, setBgmPreset] = useState(0); // 👈 초기값 0 (BGM 없음)으로 설정
+  const [playingBgm, setPlayingBgm] = useState(null);
+
+  const bgmAudioRef = useRef(null);
+  const bgmTimeoutRef = useRef(null);
+
+  // 👈 음성 속도 및 자막 색상 상태 선언
+  const [voiceSpeed, setVoiceSpeed] = useState(1.0);
+  const [subtitleColor, setSubtitleColor] = useState('#F4F4F4');
+  const [boxColor, setBoxColor] = useState('#1B1D1C');
+
+  const [inverse, setInverse] = useState(true);
+
   const [sourceVideoPath, setSourceVideoPath] = useState('');
   const [playingVoice, setPlayingVoice] = useState(null);
 
@@ -70,7 +89,20 @@ export default function Editor() {
   const voiceOptions = [
     { id: 'F7wT70V3u09d2rY9pNa6', file: 'F7wT70V3u09d2rY9pNa6.mp3', label: '유라' },
     { id: 'KlstlYt9VVf3zgie2Oht', file: 'KlstlYt9VVf3zgie2Oht.mp3', label: '소라' },
-    { id: 'TRO4gatqxbbwLXHLDLSk', file: 'TRO4gatqxbbwLXHLDLSk.mp3', label: '재성' }
+    { id: 'TRO4gatqxbbwLXHLDLSk', file: 'TRO4gatqxbbwLXHLDLSk.mp3', label: '재성' },
+    { id: 'XAezqB2SuTKEhjCMe7Oy', file: 'XAezqB2SuTKEhjCMe7Oy.mp3', label: '로거' },
+    { id: 's3TPKV1kjDlVtZbl4Ksh', file: 's3TPKV1kjDlVtZbl4Ksh.mp3', label: '아담' },
+    { id: 'cCYjmrGZaI86GUJ7F2Nn', file: 'cCYjmrGZaI86GUJ7F2Nn.mp3', label: '데이비드' },
+    { id: 'NDTYOmYEjbDIVCKB35i3', file: 'NDTYOmYEjbDIVCKB35i3.mp3', label: '페이지' }
+  ];
+
+  const bgmOptions = [
+    { id: 0, file: null, label: 'BGM 없음' }, // 👈 0번 추가
+    { id: 1, file: '1.mp3', label: '' },
+    { id: 2, file: '2.mp3', label: '' },
+    { id: 3, file: '3.mp3', label: '' },
+    { id: 4, file: '4.mp3', label: '' },
+    { id: 5, file: '5.mp3', label: '' }
   ];
 
   useEffect(() => {
@@ -93,7 +125,7 @@ export default function Editor() {
           try {
             const resolved = await getDownloadUrl(workIdParam);
             setDownloadUrl(resolved || data.renderResult?.outputVideoUrl || '');
-          } catch (_) {}
+          } catch (_) { }
         }
       } catch (err) {
         navigate('/dashboard');
@@ -111,20 +143,59 @@ export default function Editor() {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-    
+
     const audioPath = `/voices/${fileName}`;
     const newAudio = new Audio(audioPath);
-    
+
     setPlayingVoice(voiceId);
     newAudio.play().catch(err => console.error("오디오 재생 실패:", err));
-    
+
     newAudio.onended = () => setPlayingVoice(null);
     audioRef.current = newAudio;
   };
 
+  const handleBgmSelect = (bgmId, fileName) => {
+    setBgmPreset(bgmId);
+
+    // 1. 기존 재생 중이던 오디오 및 이전에 돌던 5초 타이머 싹 다 초기화
+    if (audioRef.current) { audioRef.current.pause(); setPlayingVoice(null); }
+    if (bgmAudioRef.current) { bgmAudioRef.current.pause(); bgmAudioRef.current.currentTime = 0; }
+    if (bgmTimeoutRef.current) { clearTimeout(bgmTimeoutRef.current); bgmTimeoutRef.current = null; }
+
+    // 0번(BGM 없음)을 골랐다면 여기서 바로 종료
+    if (bgmId === 0 || !fileName) {
+      setPlayingBgm(null);
+      return;
+    }
+
+    // 2. 실제 mp3 파일 세팅 및 재생
+    const bgmPath = `/${fileName}`;
+    const newAudio = new Audio(bgmPath);
+    newAudio.volume = 0.4;
+
+    setPlayingBgm(bgmId);
+    newAudio.play().catch(err => console.error("BGM 재생 실패:", err));
+
+    // 자연스럽게 오디오가 끝났을 때의 처리
+    newAudio.onended = () => {
+      setPlayingBgm(null);
+      if (bgmTimeoutRef.current) { clearTimeout(bgmTimeoutRef.current); bgmTimeoutRef.current = null; }
+    };
+    bgmAudioRef.current = newAudio;
+
+    // 3. 🔥 딱 5초(5000ms) 뒤에 오디오를 멈추는 타이머 등록
+    bgmTimeoutRef.current = setTimeout(() => {
+      if (bgmAudioRef.current && !bgmAudioRef.current.paused) {
+        bgmAudioRef.current.pause();
+        bgmAudioRef.current.currentTime = 0; // 재생 바 처음으로 초기화
+        setPlayingBgm(null);
+      }
+    }, 10000);
+  };
+
   const handleScriptChange = (index, newText) => {
     const updated = [...scripts];
-    updated[index].text = newText;
+    updated[index].text = newText.slice(0, 15);
     setScripts(updated);
   };
 
@@ -216,7 +287,7 @@ export default function Editor() {
         sourceVideoPath: sourceVideoPath,
         originalScript: originalScript
       });
-      alert('저장되었습니다.');
+
     } catch (err) {
       alert('저장 실패');
     } finally {
@@ -259,19 +330,39 @@ export default function Editor() {
   const handleRender = async () => {
     if (!work || !sourceVideoPath) return;
     if (!window.confirm('렌더링을 시작하시겠습니까?')) return;
-    handleSave
+
+    try {
+      await handleSave();
+    } catch (saveErr) {
+      console.error("렌더링 전 자동 저장 실패:", saveErr);
+    }
+
     try {
       setSubmitLoading(true);
       setRendering(true);
       setJobProgress({ phase: 'render', status: 'PENDING', progress: 0, message: '렌더링 요청 중...' });
-      const result = await startRenderingAndWait(workIdParam, rect, videoDim, selectedVoice, (progress) => {
-        setJobProgress({
-          phase: 'render',
-          status: progress.status,
-          progress: progress.progress ?? 0,
-          message: progress.message || '렌더링 진행 중...',
-        });
-      });
+
+      // 👈 [중요] API 명세 순서에 맞춰 파라미터 전달하도록 수정
+      // startRenderingAndWait(workId, rect, videoDim, voicePreset, voiceSpeed, subtitleColor, boxColor, onProgress)
+      const result = await startRenderingAndWait(
+        workIdParam,
+        rect,
+        videoDim,
+        selectedVoice,
+        voiceSpeed,
+        subtitleColor,
+        boxColor,
+        inverse,
+        bgmPreset,
+        (progress) => {
+          setJobProgress({
+            phase: 'render',
+            status: progress.status,
+            progress: progress.progress ?? 0,
+            message: progress.message || '렌더링 진행 중...',
+          });
+        }
+      );
 
       const payload = result?.work || result?.data?.work || result?.result || result;
       const nextPreviewUrl = payload?.renderResult?.outputVideoUrl || payload?.outputVideoUrl || '';
@@ -286,10 +377,11 @@ export default function Editor() {
       }
 
       setJobProgress({ phase: 'render', status: 'DONE', progress: 100, message: '렌더링 완료' });
-      
+
     } catch (err) {
       setJobProgress({ phase: 'render', status: 'FAILED', progress: 0, message: err?.message || '렌더링 실패' });
       alert('렌더링 실패');
+
     } finally {
       setSubmitLoading(false);
       setRendering(false);
@@ -347,7 +439,6 @@ export default function Editor() {
 
   return (
     <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      {/* 헤더 부분에 relative를 추가하여 내부에 프로그레스 바가 absolute로 위치할 수 있도록 수정했습니다. */}
       <header className="h-16 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-50 relative">
         <div className="flex items-center gap-4">
           <Link to="/dashboard" className="p-2 hover:bg-white/10 rounded-xl transition-colors"><ArrowLeft className="w-5 h-5 text-slate-400" /></Link>
@@ -356,8 +447,7 @@ export default function Editor() {
             {work && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${(statusLabelMap[work?.status]?.color) || 'bg-white/10 text-slate-300 border-white/5'}`}>{(statusLabelMap[work?.status]?.label) || work?.status || 'Unknown'}</span>}
           </div>
         </div>
-        
-        {/* 분석/렌더링 중일 때 현재 상태 텍스트를 헤더 중앙에 작게 표시하여 사용자 인지성을 높였습니다. */}
+
         {!isCompleted && jobProgress && !['DONE', 'COMPLETED', 'FAILED'].includes(jobProgress.status) && (
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 text-xs font-semibold tracking-wider text-cyan-400 bg-cyan-500/10 px-3 py-1 rounded-full border border-cyan-500/20">
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -387,24 +477,20 @@ export default function Editor() {
           )}
         </div>
 
-        {/* [변경 포인트] 기존의 독립적인 block 형태 대신 header 내부 최하단에 밀착하는 2px 프로그레스 바로 스타일을 수정했습니다. */}
         {!isCompleted && jobProgress && (
           <div className="absolute bottom-0 left-0 w-full h-[2px] bg-white/5 overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-300 ${
-                jobProgress.status === 'FAILED' ? 'bg-red-500' : ['DONE','COMPLETED'].includes(jobProgress.status) ? 'bg-emerald-500' : 'bg-cyan-500'
-              }`} 
-              style={{ width: `${Math.min(100, Math.max(0, jobProgress.progress ?? 0))}%` }} 
+            <div
+              className={`h-full transition-all duration-300 ${jobProgress.status === 'FAILED' ? 'bg-red-500' : ['DONE', 'COMPLETED'].includes(jobProgress.status) ? 'bg-emerald-500' : 'bg-cyan-500'
+                }`}
+              style={{ width: `${Math.min(100, Math.max(0, jobProgress.progress ?? 0))}%` }}
             />
           </div>
         )}
       </header>
 
-      {/* 기존에 있던 큰 프로그레스 바 UI 블록구문은 깔끔하게 제거되었습니다. */}
-
       <main className="flex-1 flex overflow-hidden">
         {!sourceVideoPath ? (
-           <div className="flex-1 bg-slate-950 flex flex-col items-center justify-center p-12">
+          <div className="flex-1 bg-slate-950 flex flex-col items-center justify-center p-12">
             <input type="file" id="init-upload" className="hidden" accept="video/*" onChange={handleFileUpload} />
             <label htmlFor="init-upload" className="w-full max-w-4xl aspect-video rounded-[3rem] border-4 border-dashed border-white/10 hover:border-cyan-500/50 hover:bg-cyan-500/5 transition-all flex flex-col items-center justify-center gap-8 cursor-pointer group">
               <div className="w-24 h-24 bg-cyan-500/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">{uploading ? <Loader2 className="w-12 h-12 text-cyan-500 animate-spin" /> : <UploadCloud className="w-12 h-12 text-cyan-500" />}</div>
@@ -416,7 +502,6 @@ export default function Editor() {
             <section className="flex-[5] min-w-0 bg-black flex flex-col border-r border-white/10 relative">
               <div className="h-10 border-b border-white/5 flex items-center justify-between px-4 bg-slate-900/30">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Preview</span>
-                {!isCompleted && <button onClick={() => setSourceVideoPath('')} className="text-[10px] text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors"><RefreshCw className="w-3 h-3" /> 교체</button>}
               </div>
               <div className="flex-1 flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
                 <div className="relative inline-block max-w-full max-h-full">
@@ -468,14 +553,23 @@ export default function Editor() {
                           <div className="w-10 flex items-center justify-center border-r border-white/5 bg-black/10">
                             <span className="text-[10px] font-bold text-slate-600">{item.idx}</span>
                           </div>
-                          <textarea
-                            value={item.text}
-                            onChange={(e) => handleScriptChange(idx, e.target.value)}
-                            readOnly={isReadOnly}
-                            rows={2}
-                            className="flex-1 bg-transparent border-none focus:ring-0 p-4 text-sm leading-relaxed text-slate-300 resize-none overflow-hidden"
-                            placeholder="편집할 텍스트를 입력하세요..."
-                          />
+                          <div className="flex-1 flex flex-col relative">
+                            <textarea
+                              value={item.text}
+                              onChange={(e) => handleScriptChange(idx, e.target.value)}
+                              readOnly={isReadOnly}
+                              maxLength={15}
+                              rows={2}
+                              className="w-full bg-transparent border-none focus:ring-0 p-4 pb-7 text-sm leading-relaxed text-slate-300 resize-none overflow-hidden"
+                              placeholder="편집할 텍스트를 입력하세요..."
+                            />
+                            <div className="absolute bottom-1 right-3 text-[10px] font-bold text-slate-600 group-hover:text-slate-400 transition-colors">
+                              <span className={item.text.length >= 15 ? "text-amber-500" : ""}>
+                                {item.text.length}
+                              </span>
+                              <span> / 15</span>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -489,9 +583,11 @@ export default function Editor() {
               </div>
             </section>
 
+            {/* 👈 [사이드바 수정 영역] 음성 속도 슬라이더, 글자색, 글자 배경색 컴포넌트 추가 */}
             {!isCompleted && (
-              <aside className="w-64 border-l border-white/10 bg-slate-950 p-6 flex flex-col gap-10 shrink-0 overflow-y-auto">
-                <div className="space-y-4">
+              <aside className="w-64 border-l border-white/10 bg-slate-950 p-6 flex flex-col gap-8 shrink-0 overflow-y-auto">
+                {/* 1. Area Tools */}
+                <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Square className="w-3 h-3" /> Area Tools</label>
                   <button
                     onClick={() => rect ? setRect(null) : setIsDrawingMode(true)}
@@ -501,13 +597,46 @@ export default function Editor() {
                   </button>
                 </div>
 
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Settings2 className="w-3 h-3" /> Voice Preset</label>
+                {/* BGM Preset 선택 인터페이스 */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Music className="w-3 h-3" /> 배경음악
+                  </label>
+                  <div className="grid gap-2 max-h-56 overflow-y-auto pr-1">
+                    {bgmOptions.map((bgm) => (
+                      <button
+                        key={`bgm-${bgm.id}`}
+                        onClick={() => handleBgmSelect(bgm.id, bgm.file)}
+                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${bgmPreset === bgm.id ? 'border-purple-500 bg-purple-500/10 text-purple-400' : 'border-white/5 bg-white/5 text-slate-500 hover:bg-white/10'}`}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold">
+                            {bgm.id === 0 ? bgm.label : `BGM ${bgm.id}`}
+                          </span>
+                          {bgm.id !== 0 && <span className="text-[8px] opacity-40">{bgm.label}</span>}
+                        </div>
+
+                        {playingBgm === bgm.id ? (
+                          <Volume2 className="w-3 h-3 text-purple-400 animate-pulse" />
+                        ) : bgmPreset === bgm.id ? (
+                          <CheckCircle2 className="w-3 h-3 text-purple-400" />
+                        ) : (
+                          // 0번은 재생 아이콘 표시 안 함
+                          bgm.id !== 0 && <Play className="w-3 h-3 opacity-20" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Voice Preset */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><Settings2 className="w-3 h-3" /> 음성</label>
                   <div className="grid gap-2">
                     {voiceOptions.map((voice) => (
-                      <button 
-                        key={voice.id} 
-                        onClick={() => handleVoiceSelect(voice.id, voice.file)} 
+                      <button
+                        key={voice.id}
+                        onClick={() => handleVoiceSelect(voice.id, voice.file)}
                         className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all ${selectedVoice === voice.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400' : 'border-white/5 bg-white/5 text-slate-500 hover:bg-white/10'}`}
                       >
                         <div className="flex flex-col">
@@ -518,6 +647,124 @@ export default function Editor() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* 3. Voice Speed Slider (1.0 ~ 1.2, 0.1 단위) */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                    <span className="flex items-center gap-2"><Sliders className="w-3 h-3" /> 음성 속도</span>
+                    <span className="text-cyan-400 font-bold text-xs">{voiceSpeed.toFixed(1)}x</span>
+                  </label>
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/5 space-y-2">
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="1.2"
+                      step="0.1"
+                      value={voiceSpeed}
+                      onChange={(e) => setVoiceSpeed(parseFloat(e.target.value))}
+                      disabled={isReadOnly}
+                      list="speed-ticks" // 👈 브라우저 눈금 리스트 연결
+                      className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                    />
+
+                    {/* 👈 슬라이더 바에 딱 맞는 3칸 자석 눈금 정의 */}
+                    <datalist id="speed-ticks">
+                      <option value="1.0"></option>
+                      <option value="1.1"></option>
+                      <option value="1.2"></option>
+                    </datalist>
+
+                    <div className="flex justify-between text-[9px] text-slate-600 font-bold px-0.5">
+                      <span>1.0x</span>
+                      <span>1.1x</span>
+                      <span>1.2x</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 👇 좌우반전(Inverse) 체크박스 인터페이스 추가 */}
+                <div className="space-y-1.5">
+
+                  <label className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer select-none transition-all ${inverse ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400' : 'border-white/5 bg-white/5 text-slate-400 hover:bg-white/10'}`}>
+                    <div className="flex items-center gap-2">
+                      <FlipHorizontal className={`w-4 h-4 ${inverse ? 'text-cyan-400' : 'text-slate-500'}`} />
+                      <span className="text-[11px] font-bold">비디오 좌우 반전</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={inverse}
+                      onChange={(e) => setInverse(e.target.checked)}
+                      disabled={isReadOnly}
+                      className="w-4 h-4 rounded border-white/10 bg-slate-900 text-cyan-500 focus:ring-cyan-500/50 focus:ring-offset-slate-950 accent-cyan-500 cursor-pointer"
+                    />
+                  </label>
+                </div>
+
+                {/* 4. Subtitle Colors & Preview */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <Palette className="w-3 h-3" /> 자막 도구
+                  </label>
+
+                  {/* 👇 실시간 색조합 미리보기 컴포넌트 추가 */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] text-slate-400 block font-medium">자막 미리보기</span>
+                    <div
+                      className="w-full h-16 rounded-xl border border-white/10 flex items-center justify-center transition-all duration-200 overflow-hidden"
+                      style={{ backgroundColor: boxColor }}
+                    >
+                      <span
+                        className="font-black text-lg tracking-wide transition-all duration-200"
+                        style={{ color: subtitleColor }}
+                      >
+                        클릭클립
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 글자 색상 선택 */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-slate-400 block font-medium">글자 색상</span>
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-black/20 rounded-xl border border-white/5">
+                      {COLOR_OPTIONS.map((color) => (
+                        <button
+                          key={`text-${color}`}
+                          onClick={() => setSubtitleColor(color)}
+                          disabled={isReadOnly}
+                          style={{ backgroundColor: color }}
+                          className={`w-6 h-6 rounded-md relative transition-transform active:scale-95 ${subtitleColor === color ? 'ring-2 ring-cyan-400 scale-105 z-10' : 'hover:scale-105'}`}
+                          title={color}
+                        >
+                          {subtitleColor === color && (
+                            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold shadow-sm" style={{ color: color === '#F4F4F4' || color === '#FDF06F' ? '#000' : '#fff' }}>✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 글자 배경 색상 선택 */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-slate-400 block font-medium">배경 색상</span>
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-black/20 rounded-xl border border-white/5">
+                      {COLOR_OPTIONS.map((color) => (
+                        <button
+                          key={`bg-${color}`}
+                          onClick={() => setBoxColor(color)}
+                          disabled={isReadOnly}
+                          style={{ backgroundColor: color }}
+                          className={`w-6 h-6 rounded-md relative transition-transform active:scale-95 ${boxColor === color ? 'ring-2 ring-cyan-400 scale-105 z-10' : 'hover:scale-105'}`}
+                          title={color}
+                        >
+                          {boxColor === color && (
+                            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold shadow-sm" style={{ color: color === '#F4F4F4' || color === '#FDF06F' ? '#000' : '#fff' }}>✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               </aside>
             )}

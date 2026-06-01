@@ -8,7 +8,7 @@ class AnalyzeRequest(BaseModel):
 
 class EditedScriptItem(BaseModel):
     idx: int
-    text: str
+    text: str = Field(..., max_length=15)
     endTimeSec: float = 0.0
 
 class MetaData(BaseModel):
@@ -22,7 +22,12 @@ class GloblaSubtitleLayout(BaseModel):
 class SubtitleData(BaseModel):
     sourceVideoPath : str
     voicePreset: str
+    voiceSpeed : float
     audioBytes: str = ""
+    subtitleColor: str
+    boxColor: str
+    inverse: bool
+    bgmPreset: int
     metadata : MetaData
     globalSubtitleLayout: GloblaSubtitleLayout
     editedScript: List[EditedScriptItem]

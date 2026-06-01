@@ -198,6 +198,11 @@ exports.startWorkRender = async (req, res, next) => {
         const { videoDim } = req.body;
         const { userId } = req.user;
         const { voicePreset } = req.body;
+        const { voiceSpeed} = req.body;
+        const { subtitleColor } = req.body;
+        const { boxColor } = req.body;
+        const { inverse} = req.body;
+        const { bgmPreset} = req.body;
 
         console.log('[works.render] request received', {
             workId,
@@ -207,6 +212,11 @@ exports.startWorkRender = async (req, res, next) => {
             rect,
             videoDim,
             voicePreset,
+            voiceSpeed,
+            boxColor,
+            subtitleColor,
+            inverse,
+            bgmPreset
         });
 
         if (!rect) {
@@ -218,6 +228,18 @@ exports.startWorkRender = async (req, res, next) => {
 
         if (!voicePreset) {
             return res.status(400).json(response.error('VoicePreset Undefined', 400));
+        }
+
+        if (!voiceSpeed) {
+            return res.status(400).json(response.error('VoiceSpeed Undefined', 400));
+        }
+
+        if (!boxColor) {
+            return res.status(400).json(response.error('boxColor Undefined', 400));
+        }
+
+        if (!subtitleColor) {
+            return res.status(400).json(response.error('subtitleColor Undefined', 400));
         }
 
         const work = await Work.findById(workId, userId);
@@ -259,6 +281,11 @@ exports.startWorkRender = async (req, res, next) => {
         const subtitle_data = {
             sourceVideoPath: formatted.sourceVideoPath,
             voicePreset: voicePreset,
+            voiceSpeed: voiceSpeed,
+            subtitleColor: subtitleColor,
+            boxColor: boxColor,
+            inverse: inverse,
+            bgmPreset: bgmPreset,
             metadata: {
                 width: Math.round(videoDim.width),
                 height: Math.round(videoDim.height)
@@ -269,6 +296,8 @@ exports.startWorkRender = async (req, res, next) => {
             },
             editedScript: formatted.editedScript
         };
+
+        console.log(subtitle_data)
 
 
         const aiJob = await enqueueRenderJob(workId, subtitle_data);

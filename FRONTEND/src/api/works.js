@@ -120,9 +120,9 @@ export const startAnalyze = async (workId, sourceVideoPath) => {
  * @param {string} workId - 작업 ID
  * @returns {Promise<Object>} 렌더링 시작 응답
  */
-export const startRendering = async (workId, rect, videoDim) => {
+export const startRendering = async (workId, rect, videoDim, voicePreset, voiceSpeed, subtitleColor, boxColor, bgmPreset) => {
   try {
-    const { data } = await client.post(`/works/${workId}/render`, {rect, videoDim}, { timeout: 300000 });
+    const { data } = await client.post(`/works/${workId}/render`, {rect, videoDim, voicePreset, voiceSpeed, subtitleColor, boxColor, bgmPreset}, { timeout: 300000 });
     
     return data;
   } catch (error) {
@@ -275,13 +275,18 @@ export const startAnalyzeAndWait = async (workId, sourceVideoPath, onProgress = 
  * @param {string} workId - 작업 ID
  * @param {Object} rect - 렌더링 영역 { x, y, width, height }
  * @param {Object} videoDim - 영상 치수 { width, height }
+ * @param {int} voiceSpeed
+ * @param {string} subtitleColor
+ * @param {string} boxColor
+ * @param {boolean} inverse
+ * @param {string} bgmPreset
  * @param {Function} onProgress - 진행 상태 콜백
  * @returns {Promise<Object>} 완료된 렌더링 결과
  */
-export const startRenderingAndWait = async (workId, rect, videoDim, voicePreset, onProgress = null) => {
+export const startRenderingAndWait = async (workId, rect, videoDim, voicePreset, voiceSpeed, subtitleColor, boxColor,  inverse, bgmPreset, onProgress = null) => {
   try {
     // 1. 렌더링 요청 (202 Accepted 응답, jobId 포함)
-    const response = await client.post(`/works/${workId}/render`, { rect, videoDim, voicePreset }, { timeout: 300000 });
+    const response = await client.post(`/works/${workId}/render`, { rect, videoDim, voicePreset, voiceSpeed, subtitleColor, boxColor, inverse ,bgmPreset}, { timeout: 300000 });
 
     const { jobId } = response.data.data;
     if (!jobId) {

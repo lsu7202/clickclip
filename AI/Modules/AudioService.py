@@ -28,9 +28,12 @@ def create_Audio_with_subtitles(subtitle_data):
         scripts += ' ' + cleaned_text
         
     voiceId = subtitle_data.voicePreset
+    voiceSpeed = subtitle_data.voiceSpeed
+    print("속도#########")
+    print(voiceSpeed)
     
     # API 호출 (환경변수에서 가져온 키 전달)
-    audio_bytes, alignment = generate_speech_with_timestamps(voiceId, scripts, api_key)
+    audio_bytes, alignment = generate_speech_with_timestamps(voiceId, voiceSpeed, scripts, api_key)
 
     if not audio_bytes or not alignment:
         print("오디오 생성 실패")
@@ -71,7 +74,7 @@ def create_Audio_with_subtitles(subtitle_data):
     return subtitle_data
 
 
-def generate_speech_with_timestamps(voice_id, text, api_key):
+def generate_speech_with_timestamps(voice_id, voice_speed, text, api_key):
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/with-timestamps"
     
     headers = {
@@ -86,7 +89,7 @@ def generate_speech_with_timestamps(voice_id, text, api_key):
         "voice_settings": {
             "stability": 0.5,
             "similarity_boost": 0.75,
-            "speed": 1.0
+            "speed": voice_speed
         }
     }
 

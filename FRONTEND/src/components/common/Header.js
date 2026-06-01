@@ -13,8 +13,8 @@ export default function Header() {
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/85 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
         {/* 로고 영역 */}
-        <Link to="/" className="flex items-center gap-3 text-black">
-          <div className="rounded-2xl bg-black-400/15 p-2 text-black-300 ring-1 ring-black-300/20 w-fit flex items-center justify-center border border-black-300">
+        <Link to="/" className="flex items-center gap-3 text-white">
+          <div className="rounded-2xl bg-black-400/15 p-2 text-white-300 ring-1 ring-black-300/20 w-fit flex items-center justify-center border border-black-300">
             <img
               src={'logo.png'}
               alt="icon"
