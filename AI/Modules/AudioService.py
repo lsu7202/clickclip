@@ -3,6 +3,7 @@ import json
 import base64
 import os
 import base64
+import re
 
 def create_Audio_with_subtitles(subtitle_data):
     """
@@ -112,14 +113,10 @@ def generate_speech_with_timestamps(voice_id, voice_speed, text, api_key):
 def clean_text(text):
     if not text:
         return ""
-    # 1. 백슬래시 자체를 먼저 이스케이프
-    text = text.replace('\\', '\\\\')
-    # 2. 싱글 쿼테이션(작은따옴표) 이스케이프
-    text = text.replace("'", "'\\''")
-    # 3. 콜론(:) 이스케이프 (drawtext 인자 구분자 방지)
-    text = text.replace(':', '\\:')
-    # 4. 퍼센트(%) 이스케이프 (FFmpeg 변수 포맷팅 방지)
-    text = text.replace('%', '\\%')
-
-    text = text.replace('.', '')
-    return text
+    # 한글, 영어, 숫자, 공백(스페이스)만 남기고 나머지 모든 특수문자/기호 제거
+    # [^ ...] 은 대괄호 안의 문자가 아닌 것들을 뜻합니다.
+    cleaned = re.sub(r"[^가-힣a-zA-Z0-9\s]", "", text)
+    
+    # 양끝 공백 제거 및 연속된 공백은 하나로 축소
+    cleaned = " ".join(cleaned.split())
+    return cleaned
