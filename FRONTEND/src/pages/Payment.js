@@ -95,11 +95,11 @@ export default function Checkout() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
                                         <p className="text-xs text-slate-500 mb-1">은행명</p>
-                                        <p className="font-semibold text-slate-200">신한은행</p>
+                                        <p className="font-semibold text-slate-200"></p>
                                     </div>
                                     <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
                                         <p className="text-xs text-slate-500 mb-1">계좌번호</p>
-                                        <p className="font-semibold text-slate-200">123-456-789012</p>
+                                        <p className="font-semibold text-slate-200"></p>
                                     </div>
                                 </div>
                             </div>
