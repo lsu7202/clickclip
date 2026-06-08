@@ -22,7 +22,7 @@ function App() {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/payment" element={<Payment />} />
         {/* 관리자 전용 경로 */}
-        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/approve" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );
